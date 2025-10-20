@@ -5,9 +5,11 @@
 #include "Unit.h"
 #include "Creature.h"
 #include "Player.h"
+#include "SpellInfo.h"
 
 #include <unordered_map>
 #include <algorithm>
+#include <cmath>
 
 namespace FortisAB
 {
@@ -17,17 +19,15 @@ namespace FortisAB
         bool   InstanceOnly     = true;   // nur Dungeon/Raid
         uint32 BaselinePlayers  = 5;      // z. B. 5 für 5er-Instanz
         float  MinMultiplier    = 0.0f;   // 0.0 = automatisch 1/Baseline
-        bool   AllowAboveBase   = false;  // >1.0 erlauben? (Standard: nein)
+        bool   AllowAboveBase   = false;  // >1.0 erlauben?
     };
 
     static Settings s;
 
     struct SavedStats
     {
-        uint32 maxHealth;
-        float  baseMin[2];
-        float  baseMax[2];
-        bool   applied = false;
+        uint32 maxHealth = 0;
+        bool   applied   = false;
     };
 
     static std::unordered_map<Creature*, SavedStats> g_saved;
@@ -45,7 +45,6 @@ namespace FortisAB
         {
             if (Player* p = ref.GetSource())
             {
-                // GMs zählen nicht (nur bei .gm off würden sie gezählt)
                 if (!p->IsGameMaster())
                     ++n;
             }
@@ -53,65 +52,45 @@ namespace FortisAB
         return n;
     }
 
-    // Linear: 1 Spieler -> ~1/Baseline, 5 Spieler (Baseline=5) -> 1.0
-    static inline float ComputeMultiplier(uint32 playerCount)
+    // Linear: players / baseline, mit Untergrenze und optionaler Obergrenze 1.0
+    static inline float ComputeLinearMultiplier(uint32 playerCount)
     {
         uint32 base = s.BaselinePlayers ? s.BaselinePlayers : 1;
-        float ratio = float(std::max<uint32>(playerCount, 1)) / float(base);
+        float  ratio = float(std::max<uint32>(playerCount, 1)) / float(base);
 
         float minMul = s.MinMultiplier > 0.0f ? s.MinMultiplier : (1.0f / float(base));
         if (!s.AllowAboveBase && ratio > 1.0f)
             ratio = 1.0f;
         if (ratio < minMul)
             ratio = minMul;
-        return ratio; // 0.2 .. 1.0 bei Baseline=5
+        return ratio;
     }
 
-    static void ApplyScaling(Creature* c, float mult)
+    // Nur HP skalieren (Schaden wird in Hooks skaliert)
+    static void ApplyHpScaling(Creature* c, float mult)
     {
         if (!c || mult == 1.0f)
             return;
 
         auto& slot = g_saved[c];
         if (slot.applied)
-            return; // bereits skaliert
+            return;
 
-        // Originalwerte sichern
-        slot.maxHealth  = c->GetMaxHealth();
-        slot.baseMin[0] = c->GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE);
-        slot.baseMax[0] = c->GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE);
-        slot.baseMin[1] = c->GetWeaponDamageRange(OFF_ATTACK,  MINDAMAGE);
-        slot.baseMax[1] = c->GetWeaponDamageRange(OFF_ATTACK,  MAXDAMAGE);
+        slot.maxHealth = c->GetMaxHealth();
 
-        // HP skalieren
         const uint32 newMax = uint32(float(slot.maxHealth) * mult);
         c->SetMaxHealth(newMax);
         uint32 newCur = uint32(float(c->GetHealth()) * mult);
         if (newCur > newMax) newCur = newMax;
         c->SetHealth(newCur);
 
-        // Grundschaden skalieren
-        for (uint8 i = BASE_ATTACK; i <= OFF_ATTACK; ++i)
-        {
-            float minD = c->GetWeaponDamageRange(WeaponAttackType(i), MINDAMAGE);
-            float maxD = c->GetWeaponDamageRange(WeaponAttackType(i), MAXDAMAGE);
-            if (minD > 0.f && maxD > 0.f)
-            {
-                c->SetBaseWeaponDamage(WeaponAttackType(i), MINDAMAGE, minD * mult);
-                c->SetBaseWeaponDamage(WeaponAttackType(i), MAXDAMAGE, maxD * mult);
-                c->UpdateDamagePhysical(WeaponAttackType(i));
-            }
-        }
-
         slot.applied = true;
 
-        // INFO, damit du es im Journal siehst
-        LOG_INFO("module", "mod-fortis-autobalance: applied x%.2f to creature %s (map %u, players=%u)",
-                 mult, c->GetGUID().ToString().c_str(), c->GetMapId(),
-                 c->GetMap() ? FortisAB::CountRelevantPlayers(c->GetMap()) : 0);
+        LOG_INFO("module", "mod-fortis-autobalance: applied HP x%.2f to creature %s (map %u)",
+                 mult, c->GetGUID().ToString().c_str(), c->GetMapId());
     }
 
-    static void RevertScaling(Creature* c)
+    static void RevertHpScaling(Creature* c)
     {
         if (!c) return;
         auto it = g_saved.find(c);
@@ -124,16 +103,9 @@ namespace FortisAB
         if (c->GetHealth() > st.maxHealth)
             c->SetHealth(st.maxHealth);
 
-        c->SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, st.baseMin[0]);
-        c->SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, st.baseMax[0]);
-        c->SetBaseWeaponDamage(OFF_ATTACK,  MINDAMAGE, st.baseMin[1]);
-        c->SetBaseWeaponDamage(OFF_ATTACK,  MAXDAMAGE, st.baseMax[1]);
-        c->UpdateDamagePhysical(BASE_ATTACK);
-        c->UpdateDamagePhysical(OFF_ATTACK);
-
         g_saved.erase(it);
 
-        LOG_INFO("module", "mod-fortis-autobalance: reverted for creature %s",
+        LOG_INFO("module", "mod-fortis-autobalance: reverted HP for creature %s",
                  c->GetGUID().ToString().c_str());
     }
 }
@@ -158,21 +130,73 @@ public:
             return;
 
         const uint32 n = FortisAB::CountRelevantPlayers(map);
-        const float  m = FortisAB::ComputeMultiplier(n);
+        const float  m = FortisAB::ComputeLinearMultiplier(n);
 
-        FortisAB::ApplyScaling(c, m);
+        FortisAB::ApplyHpScaling(c, m);
     }
 
     void OnUnitEnterEvadeMode(Unit* unit, uint8 /*why*/) override
     {
         if (unit && unit->GetTypeId() == TYPEID_UNIT)
-            FortisAB::RevertScaling(unit->ToCreature());
+            FortisAB::RevertHpScaling(unit->ToCreature());
     }
 
     void OnUnitDeath(Unit* unit, Unit* /*killer*/) override
     {
         if (unit && unit->GetTypeId() == TYPEID_UNIT)
-            FortisAB::RevertScaling(unit->ToCreature());
+            FortisAB::RevertHpScaling(unit->ToCreature());
+    }
+};
+
+// Skaliert JEGLICHEN ausgehenden Schaden der Kreatur (Melee, Spell, Periodic)
+class FortisAutobalance_Damage : public UnitScript
+{
+public:
+    FortisAutobalance_Damage() : UnitScript("FortisAutobalance_Damage") { }
+
+    void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage) override
+    {
+        if (!attacker || attacker->GetTypeId() != TYPEID_UNIT || damage == 0)
+            return;
+        if (!FortisAB::s.Enable)
+            return;
+
+        Map* map = attacker->GetMap();
+        if (FortisAB::s.InstanceOnly && !FortisAB::IsInstanceMap(map))
+            return;
+
+        float m = FortisAB::ComputeLinearMultiplier(FortisAB::CountRelevantPlayers(map));
+        damage = uint32(std::lround(damage * m));
+    }
+
+    void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage, SpellInfo const* /*spellInfo*/) override
+    {
+        if (!attacker || attacker->GetTypeId() != TYPEID_UNIT || damage <= 0)
+            return;
+        if (!FortisAB::s.Enable)
+            return;
+
+        Map* map = attacker->GetMap();
+        if (FortisAB::s.InstanceOnly && !FortisAB::IsInstanceMap(map))
+            return;
+
+        float m = FortisAB::ComputeLinearMultiplier(FortisAB::CountRelevantPlayers(map));
+        damage = int32(std::lround(float(damage) * m));
+    }
+
+    void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage, SpellInfo const* /*spellInfo*/) override
+    {
+        if (!attacker || attacker->GetTypeId() != TYPEID_UNIT || damage == 0)
+            return;
+        if (!FortisAB::s.Enable)
+            return;
+
+        Map* map = attacker->GetMap();
+        if (FortisAB::s.InstanceOnly && !FortisAB::IsInstanceMap(map))
+            return;
+
+        float m = FortisAB::ComputeLinearMultiplier(FortisAB::CountRelevantPlayers(map));
+        damage = uint32(std::lround(float(damage) * m));
     }
 };
 
@@ -199,6 +223,7 @@ public:
     void OnStartup() override
     {
         new FortisAutobalance_Unit();
+        new FortisAutobalance_Damage();
         LOG_INFO("module", "mod-fortis-autobalance: loaded");
     }
 };
