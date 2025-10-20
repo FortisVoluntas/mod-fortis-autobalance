@@ -1,0 +1,8 @@
+# Build artefacts
+build/
+.env/
+*.swp
+*.swo
+*.user
+.DS_Store
+Thumbs.db
