@@ -1,61 +1,65 @@
-
-Autobalance Modul für die Azerothcore-Playerbot fork von @liyunfan1223 unter https://github.com/liyunfan1223/azerothcore-wotlk.git
-
-
-
 # mod-fortis-autobalance
 
-Skaliert HP und Schaden von Kreaturen in Instanzen/Raids linear nach anwesender Spielerzahl:
+**Autobalance-Modul** für die **AzerothCore-Playerbot Fork** von [@liyunfan1223](https://github.com/liyunfan1223):  
+https://github.com/liyunfan1223/azerothcore-wotlk.git
 
-Unter Baseline: Mobs sind schwächer (z. B. 1 Spieler in 5er-Instanz ≈ 20 %).
+---
 
-Bei Baseline: Mobs sind 100 % (Standard).
+## Kurzbeschreibung
 
-Über Baseline: Optional >100 % aktivierbar.
+Skaliert **HP** und **Schaden** von Kreaturen in **Instanzen/Raids** **linear** nach anwesender Spielerzahl:
 
-Keine Chat-Kommandos. Keine DB-Schreibzugriffe. Reine Laufzeit-Anpassung bei Kampfbeginn, Rücksetzung bei Evade/Tod.
+- **Unter Baseline:** Mobs sind schwächer (z. B. 1 Spieler in 5er-Instanz ≈ **20 %**).
+- **Bei Baseline:** Mobs sind **100 %** (Standard).
+- **Über Baseline:** Optional **> 100 %** aktivierbar.
 
-Funktionsweise
+Eigenschaften: keine Chat-Kommandos, keine DB-Schreibzugriffe, reine Laufzeit-Anpassung bei **Kampfbeginn**, Rücksetzung bei **Evade/Tod**.
 
-Spielerzählung: GMs werden nicht gezählt, solange .gm on; bei .gm off werden sie gezählt.
+---
 
-Playerbots werden gezählt (Player-Objekte).
+## Funktionsweise
 
-Linearer Faktor (Standard):
+- **Spielerzählung:** GMs werden **nicht** gezählt, solange `.gm on`; bei `.gm off` werden sie gezählt.  
+- **Playerbots** werden gezählt (Player-Objekte).
 
-Multiplier = clamp( players / BaselinePlayers, MinMultiplier, 1.0 )
+**Linearer Faktor (Standard):**
 
-Mit AllowAboveBase = 1: Multiplier = max(players / BaselinePlayers, MinMultiplier) (ohne Obergrenze).
+**Mit `AllowAboveBase = 1`:**
+### Beispiel (BaselinePlayers = 5)
 
+| Spieler | Multiplier | Wirkung          |
+|-------:|-----------:|------------------|
+|      1 |       0,20 | 20 % HP/DMG      |
+|      2 |       0,40 | 40 %             |
+|      3 |       0,60 | 60 %             |
+|      4 |       0,80 | 80 %             |
+|      5 |       1,00 | 100 %            |
+|      6 |       1,20 | 120 % *(nur wenn `AllowAboveBase=1`)* |
 
-Beispiel (BaselinePlayers = 5):
-
-
-Spieler	Multiplier	Wirkung
-
-1	0,20	20 % HP/DMG
-
-2	0,40	40 %
-
-3	0,60	60 %
-
-4	0,80	80 %
-
-5	1,00	100 %
-
-6	1,20 (nur wenn AllowAboveBase=1)	120 %
-
+---
 
 ## Installation
-1. Dieses Repo in `azerothcore/modules/mod-fortis-autobalance` klonen oder kopieren.
-2. **Build**:
+
+1. Dieses Repo nach `azerothcore/modules/mod-fortis-autobalance` kopieren oder klonen.
+2. Build & Install:
    ```bash
    cd /root/azerothcore/build
    cmake ..
    make -j"$(nproc)" worldserver
-   cd /root/azerothcore/build
    make install
-3. install -m 644 /root/azerothcore/modules/mod-fortis-autobalance/conf/mod_fortis_autobalance.conf.dist \
+
+ 3. Konfiguration bereitstellen (falls nicht automatisch installiert):
+
+install -m 644 /root/azerothcore/modules/mod-fortis-autobalance/conf/mod_fortis_autobalance.conf.dist \
   /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist
-4. cp /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist \
+
+
+4. (Optional) Eigene Konfiguration aktivieren:
+
+cp /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist \
    /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf
+
+
+5. Server neu starten:
+
+systemctl restart azerothcore.service
