@@ -15,6 +15,7 @@ Skaliert **HP** und **Schaden** von Kreaturen in **Instanzen/Raids** **linear** 
 
 Eigenschaften: keine Chat-Kommandos, keine DB-Schreibzugriffe, reine Laufzeit-Anpassung bei **Kampfbeginn**, Rücksetzung bei **Evade/Tod**.
 
+(das Ganze funktioniert zu diesem Zeitpunkt schon, es gibt nur Probleme beim looten)
 ---
 
 ## Funktionsweise
