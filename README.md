@@ -30,4 +30,5 @@ Keinerlei Chat-Kommandos, keine DB-Schreibzugriffe – reiner Runtime-Scale bei 
    make install
 3. install -m 644 /root/azerothcore/modules/mod-fortis-autobalance/conf/mod_fortis_autobalance.conf.dist \
   /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist
-
+4. cp /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist \
+   /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf
