@@ -1,25 +1,21 @@
 # ============================================================
-#  Fortis AutoBalance (mod-fortis-autobalance)
-#  Skalierung für Kreaturen/Instanzgegner basierend auf Spielerzahl
+# Fortis AutoBalance (mod-fortis-autobalance)
+# Lineare Abschwächung unterhalb der Baseline-Spielerzahl.
+# Beispiel 5er-Instanz: 1 Spieler -> ~20%, 5 Spieler -> 100%.
 # ============================================================
 
-# Modul aktivieren (1) / deaktivieren (0)
+# Modul aktivieren
 FortisAB.Enable = 1
 
-# Nur in Instanzen/Raids skalieren (1) oder überall (0)
+# Nur in Instanzen/Raids (1) oder überall (0)
 FortisAB.InstanceOnly = 1
 
-# Playerbots mitzählen (ja/nee) — wird implizit gezählt, da Player-Objekt
-FortisAB.CountPlayerbots = 1
-
-# Referenzspielerzahl (ab hier gilt Multiplier 1.0)
+# Ziel-Spielerzahl für 100%
 FortisAB.BaselinePlayers = 5
 
-# Pro zusätzlichem Spieler: HP-Zuwachs (0.50 = +50%)
-FortisAB.HealthPerExtraPlayer = 0.50
+# Minimaler Multiplikator; 0.0 = automatisch 1/Baseline
+# (Bei Baseline=5 ist auto = 0.20)
+FortisAB.MinMultiplier = 0.0
 
-# Pro zusätzlichem Spieler: Grundschaden-Zuwachs (0.30 = +30%)
-FortisAB.DamagePerExtraPlayer = 0.30
-
-# Obergrenze für den Multiplier
-FortisAB.MaxMultiplier = 3.0
+# Über Baseline >100% erlauben? 0 = nein (Standard), 1 = ja
+FortisAB.AllowAboveBase = 0
