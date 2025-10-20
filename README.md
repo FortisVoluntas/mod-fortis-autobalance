@@ -5,19 +5,27 @@ Autobalance Modul für die Azerothcore-Playerbot fork von @liyunfan1223 unter ht
 
 # mod-fortis-autobalance
 
-Skaliert **HP** und **Grundschaden** von Kreaturen in **Instanzen/Raids** automatisch anhand der anwesenden Spielerzahl.  
-Keinerlei Chat-Kommandos, keine DB-Schreibzugriffe – reiner Runtime-Scale bei Kampfbeginn, Rücksetzung bei Evade/Tod.
+Skaliert HP und Schaden von Kreaturen in Instanzen/Raids linear nach anwesender Spielerzahl:
+Unter Baseline: Mobs sind schwächer (z. B. 1 Spieler in 5er-Instanz ≈ 20 %).
+Bei Baseline: Mobs sind 100 % (Standard).
+Über Baseline: Optional >100 % aktivierbar.
+Keine Chat-Kommandos. Keine DB-Schreibzugriffe. Reine Laufzeit-Anpassung bei Kampfbeginn, Rücksetzung bei Evade/Tod.
+Funktionsweise
+Spielerzählung: GMs werden nicht gezählt, solange .gm on; bei .gm off werden sie gezählt.
+Playerbots werden gezählt (Player-Objekte).
+Linearer Faktor (Standard):
+Multiplier = clamp( players / BaselinePlayers, MinMultiplier, 1.0 )
+Mit AllowAboveBase = 1: Multiplier = max(players / BaselinePlayers, MinMultiplier) (ohne Obergrenze).
 
-## Features
-- Automatische Skalierung bei **Kampfbeginn**
-- **Revert** bei **Evade** oder **Tod**
-- **GMs** werden **nicht** gezählt, solange `.gm on`; bei `.gm off` werden sie als normale Spieler gezählt
-- **Playerbots** werden gezählt (sind `Player`-Objekte)
-- Konfigurierbar über `FortisAB.*`
+Beispiel (BaselinePlayers = 5):
 
-## Formel (vereinfacht)
-- `Multiplier = min( 1.0 + HealthPerExtraPlayer * max(0, Players - BaselinePlayers), MaxMultiplier )`
-- HP und Basis-Waffenschaden (BaseAttack/Offhand) werden mit `Multiplier` hochskaliert.
+Spieler	Multiplier	Wirkung
+1	0,20	20 % HP/DMG
+2	0,40	40 %
+3	0,60	60 %
+4	0,80	80 %
+5	1,00	100 %
+6	1,20 (nur wenn AllowAboveBase=1)	120 %
 
 ## Installation
 1. Dieses Repo in `azerothcore/modules/mod-fortis-autobalance` klonen oder kopieren.
