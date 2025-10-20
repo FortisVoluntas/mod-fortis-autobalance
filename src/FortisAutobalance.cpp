@@ -5,21 +5,19 @@
 #include "Unit.h"
 #include "Creature.h"
 #include "Player.h"
-#include "Group.h"
 
 #include <unordered_map>
+#include <algorithm>
 
 namespace FortisAB
 {
     struct Settings
     {
-        bool   Enable                = true;
-        bool   InstanceOnly          = true;     // nur Dungeon/Raid
-        bool   CountPlayerbots       = true;     // Bots als Spieler zählen (Player-Objekte)
-        uint32 BaselinePlayers       = 5;        // Referenz
-        float  HealthPerExtraPlayer  = 0.50f;    // +50% HP je zusätzl. Spieler
-        float  DamagePerExtraPlayer  = 0.30f;    // +30% Grundschaden je zusätzl. Spieler
-        float  MaxMultiplier         = 3.0f;     // Deckel
+        bool   Enable           = true;
+        bool   InstanceOnly     = true;   // nur Dungeon/Raid
+        uint32 BaselinePlayers  = 5;      // z. B. 5 für 5er-Instanz
+        float  MinMultiplier    = 0.0f;   // 0.0 = automatisch 1/Baseline
+        bool   AllowAboveBase   = false;  // >1.0 erlauben? (Standard: nein)
     };
 
     static Settings s;
@@ -32,7 +30,6 @@ namespace FortisAB
         bool   applied = false;
     };
 
-    // Laufzeit-Map: pro Creature Originalwerte
     static std::unordered_map<Creature*, SavedStats> g_saved;
 
     static inline bool IsInstanceMap(const Map* m)
@@ -44,12 +41,11 @@ namespace FortisAB
     {
         if (!map) return 0;
         uint32 n = 0;
-        Map::PlayerList const& pl = map->GetPlayers();
-        for (auto const& ref : pl)
+        for (auto const& ref : map->GetPlayers())
         {
             if (Player* p = ref.GetSource())
             {
-                // GMs nicht zählen (nur echte Spieler). Bei ".gm off" werden sie gezählt.
+                // GMs zählen nicht (nur bei .gm off würden sie gezählt)
                 if (!p->IsGameMaster())
                     ++n;
             }
@@ -57,21 +53,23 @@ namespace FortisAB
         return n;
     }
 
+    // Linear: 1 Spieler -> ~1/Baseline, 5 Spieler (Baseline=5) -> 1.0
     static inline float ComputeMultiplier(uint32 playerCount)
     {
-        if (playerCount <= s.BaselinePlayers)
-            return 1.0f;
+        uint32 base = s.BaselinePlayers ? s.BaselinePlayers : 1;
+        float ratio = float(std::max<uint32>(playerCount, 1)) / float(base);
 
-        const uint32 extra = playerCount - s.BaselinePlayers;
-        float m = 1.0f + s.HealthPerExtraPlayer * extra;
-        if (m > s.MaxMultiplier)
-            m = s.MaxMultiplier;
-        return m;
+        float minMul = s.MinMultiplier > 0.0f ? s.MinMultiplier : (1.0f / float(base));
+        if (!s.AllowAboveBase && ratio > 1.0f)
+            ratio = 1.0f;
+        if (ratio < minMul)
+            ratio = minMul;
+        return ratio; // 0.2 .. 1.0 bei Baseline=5
     }
 
     static void ApplyScaling(Creature* c, float mult)
     {
-        if (!c || mult <= 1.0f)
+        if (!c || mult == 1.0f)
             return;
 
         auto& slot = g_saved[c];
@@ -79,7 +77,7 @@ namespace FortisAB
             return; // bereits skaliert
 
         // Originalwerte sichern
-        slot.maxHealth = c->GetMaxHealth();
+        slot.maxHealth  = c->GetMaxHealth();
         slot.baseMin[0] = c->GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE);
         slot.baseMax[0] = c->GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE);
         slot.baseMin[1] = c->GetWeaponDamageRange(OFF_ATTACK,  MINDAMAGE);
@@ -97,7 +95,7 @@ namespace FortisAB
         {
             float minD = c->GetWeaponDamageRange(WeaponAttackType(i), MINDAMAGE);
             float maxD = c->GetWeaponDamageRange(WeaponAttackType(i), MAXDAMAGE);
-            if (minD > 0.0f && maxD > 0.0f)
+            if (minD > 0.f && maxD > 0.f)
             {
                 c->SetBaseWeaponDamage(WeaponAttackType(i), MINDAMAGE, minD * mult);
                 c->SetBaseWeaponDamage(WeaponAttackType(i), MAXDAMAGE, maxD * mult);
@@ -107,8 +105,10 @@ namespace FortisAB
 
         slot.applied = true;
 
-        LOG_DEBUG("module", "mod-fortis-autobalance: applied x%.2f to creature %s (map %u)",
-                  mult, c->GetGUID().ToString().c_str(), c->GetMapId());
+        // INFO, damit du es im Journal siehst
+        LOG_INFO("module", "mod-fortis-autobalance: applied x%.2f to creature %s (map %u, players=%u)",
+                 mult, c->GetGUID().ToString().c_str(), c->GetMapId(),
+                 c->GetMap() ? FortisAB::CountRelevantPlayers(c->GetMap()) : 0);
     }
 
     static void RevertScaling(Creature* c)
@@ -133,12 +133,11 @@ namespace FortisAB
 
         g_saved.erase(it);
 
-        LOG_DEBUG("module", "mod-fortis-autobalance: reverted for creature %s",
-                  c->GetGUID().ToString().c_str());
+        LOG_INFO("module", "mod-fortis-autobalance: reverted for creature %s",
+                 c->GetGUID().ToString().c_str());
     }
 }
 
-// Automatik über UnitScript-Hooks
 class FortisAutobalance_Unit : public UnitScript
 {
 public:
@@ -160,7 +159,6 @@ public:
 
         const uint32 n = FortisAB::CountRelevantPlayers(map);
         const float  m = FortisAB::ComputeMultiplier(n);
-        if (m <= 1.0f) return;
 
         FortisAB::ApplyScaling(c, m);
     }
@@ -189,13 +187,11 @@ public:
         auto geti = [](char const* k, int   def){ return sConfigMgr->GetOption<int>(k, def);   };
         auto getb = [](char const* k, bool  def){ return sConfigMgr->GetOption<bool>(k, def);  };
 
-        FortisAB::s.Enable               = getb ("FortisAB.Enable",               true);
-        FortisAB::s.InstanceOnly         = getb ("FortisAB.InstanceOnly",         true);
-        FortisAB::s.CountPlayerbots      = getb ("FortisAB.CountPlayerbots",      true);
-        FortisAB::s.BaselinePlayers      = uint32(geti("FortisAB.BaselinePlayers",5));
-        FortisAB::s.HealthPerExtraPlayer = getf ("FortisAB.HealthPerExtraPlayer", 0.50f);
-        FortisAB::s.DamagePerExtraPlayer = getf ("FortisAB.DamagePerExtraPlayer", 0.30f);
-        FortisAB::s.MaxMultiplier        = getf ("FortisAB.MaxMultiplier",        3.0f);
+        FortisAB::s.Enable          = getb ("FortisAB.Enable",          true);
+        FortisAB::s.InstanceOnly    = getb ("FortisAB.InstanceOnly",    true);
+        FortisAB::s.BaselinePlayers = uint32(geti("FortisAB.BaselinePlayers", 5));
+        FortisAB::s.MinMultiplier   = getf ("FortisAB.MinMultiplier",   0.0f);  // 0.0 = auto 1/Baseline
+        FortisAB::s.AllowAboveBase  = getb ("FortisAB.AllowAboveBase",  false);
 
         LOG_INFO("module", "mod-fortis-autobalance: config loaded (reload=%d)", int(reload));
     }
