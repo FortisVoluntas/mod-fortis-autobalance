@@ -1,0 +1,8 @@
+# mod-fortis-autobalance (FortisAB)
+FortisAB.Enable = 1
+FortisAB.InstanceOnly = 1
+FortisAB.CountPlayerbots = 1
+FortisAB.BaselinePlayers = 5
+FortisAB.HealthPerExtraPlayer = 0.50
+FortisAB.DamagePerExtraPlayer = 0.30
+FortisAB.MaxMultiplier = 3.0
