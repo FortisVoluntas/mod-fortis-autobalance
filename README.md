@@ -48,18 +48,13 @@ Eigenschaften: keine Chat-Kommandos, keine DB-Schreibzugriffe, reine Laufzeit-An
    make -j"$(nproc)" worldserver
    make install
 
- 3. Konfiguration bereitstellen (falls nicht automatisch installiert):
+    //3. Konfiguration bereitstellen (falls nicht automatisch installiert):
+   install -m 644 /root/azerothcore/modules/mod-fortis-autobalance/conf/mod_fortis_autobalance.conf.dist \
+   /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist
 
-install -m 644 /root/azerothcore/modules/mod-fortis-autobalance/conf/mod_fortis_autobalance.conf.dist \
-  /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist
-
-
-4. (Optional) Eigene Konfiguration aktivieren:
-
-cp /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist \
+    //4. (Optional) Eigene Konfiguration aktivieren:
+   cp /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf.dist \
    /root/azerothcore/env/dist/etc/modules/mod_fortis_autobalance.conf
 
-
-5. Server neu starten:
-
-systemctl restart azerothcore.service
+   //5. Server neu starten:
+   systemctl restart azerothcore.service
