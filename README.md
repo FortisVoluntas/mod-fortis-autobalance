@@ -1,7 +1,10 @@
 # mod-fortis-autobalance
 
 **Why you’ll want this:
-Turn empty dungeons into playable, rewarding content—right now. On low-pop servers, the module lets you solo dungeons by smartly scaling damage in your favor; as friends (or bots) join, the modifiers fade to 100% normal for a true group experience. No gimmicks, no grindy tweaks—just smooth difficulty that adapts to your party size.
+
+Turn empty dungeons into playable, rewarding content—right now. On low-pop servers, the module lets you solo dungeons by smartly scaling damage in your favor; as friends (or bots) join,
+the modifiers fade to 100% normal for a true group experience. No gimmicks, no grindy tweaks—just smooth difficulty that adapts to your party size.
+
 Jump in, pull a pack, and feel the difference.**
 
 
